@@ -19,13 +19,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/jmorganca/ollama/api"
-	"github.com/jmorganca/ollama/llama"
+	"github.com/jmorganca/ollama/llm"
 )
 
 var loaded struct {
 	mu sync.Mutex
 
-	llm *llama.LLM
+	llm llm.LLM
 
 	expireAt    time.Time
 	expireTimer *time.Timer
@@ -72,7 +72,8 @@ func GenerateHandler(c *gin.Context) {
 			loaded.digest = ""
 		}
 
-		llm, err := llama.New(model.ModelPath, opts)
+
+		llm, err := llm.New(model.ModelPath, opts)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

@@ -1,4 +1,4 @@
-package llama
+package llm
 
 /*
 #cgo CPPFLAGS: -O3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -DNDEBUG -DGGML_USE_K_QUANTS
@@ -104,7 +104,7 @@ import (
 //go:embed ggml-metal.metal
 var fs embed.FS
 
-type LLM struct {
+type llama struct {
 	params *C.struct_llama_context_params
 	model  *C.struct_llama_model
 	ctx    *C.struct_llama_context
@@ -119,12 +119,28 @@ type LLM struct {
 	api.Options
 }
 
-func New(model string, opts api.Options) (*LLM, error) {
+type llamaHyperparameters struct {
+	// NumVocab is the size of the model's vocabulary.
+	NumVocab uint32
+
+	// NumEmbd is the size of the model's embedding layer.
+	NumEmbd uint32
+	NumMult uint32
+	NumHead uint32
+
+	// NumLayer is the number of layers in the model.
+	NumLayer uint32
+	NumRot   uint32
+	// FileType describes the quantization level of the model, e.g. Q4_0, Q5_K, etc.
+	FileType
+}
+
+func newLlama(model string, opts api.Options) (*llama, error) {
 	if _, err := os.Stat(model); err != nil {
 		return nil, err
 	}
 
-	llm := LLM{Options: opts}
+	llm := llama{Options: opts}
 
 	C.llama_backend_init(C.bool(llm.UseNUMA))
 
@@ -165,7 +181,7 @@ func New(model string, opts api.Options) (*LLM, error) {
 	return &llm, nil
 }
 
-func (llm *LLM) Close() {
+func (llm *llama) Close() {
 	llm.gc = true
 
 	llm.mu.Lock()
@@ -179,7 +195,7 @@ func (llm *LLM) Close() {
 
 var errNeedMoreData = errors.New("need more data")
 
-func (llm *LLM) Predict(ctx []int, prompt string, fn func(api.GenerateResponse)) error {
+func (llm *llama) Predict(ctx []int, prompt string, fn func(api.GenerateResponse)) error {
 	C.llama_reset_timings(llm.ctx)
 
 	tokens := make([]C.llama_token, len(ctx))
@@ -246,7 +262,7 @@ func (llm *LLM) Predict(ctx []int, prompt string, fn func(api.GenerateResponse))
 	return nil
 }
 
-func (llm *LLM) checkStopConditions(b bytes.Buffer) error {
+func (llm *llama) checkStopConditions(b bytes.Buffer) error {
 	for _, stopCondition := range llm.Stop {
 		if stopCondition == b.String() {
 			return io.EOF
@@ -258,7 +274,7 @@ func (llm *LLM) checkStopConditions(b bytes.Buffer) error {
 	return nil
 }
 
-func (llm *LLM) marshalPrompt(ctx []C.llama_token, prompt string) []C.llama_token {
+func (llm *llama) marshalPrompt(ctx []C.llama_token, prompt string) []C.llama_token {
 	tokens := append(ctx, llm.tokenize(prompt)...)
 	if llm.NumKeep < 0 {
 		llm.NumKeep = len(tokens)
@@ -301,7 +317,7 @@ func (llm *LLM) marshalPrompt(ctx []C.llama_token, prompt string) []C.llama_toke
 	return tokens
 }
 
-func (llm *LLM) tokenize(prompt string) []C.llama_token {
+func (llm *llama) tokenize(prompt string) []C.llama_token {
 	cPrompt := C.CString(prompt)
 	defer C.free(unsafe.Pointer(cPrompt))
 
@@ -313,7 +329,7 @@ func (llm *LLM) tokenize(prompt string) []C.llama_token {
 	return nil
 }
 
-func (llm *LLM) detokenize(tokens ...C.llama_token) string {
+func (llm *llama) detokenize(tokens ...C.llama_token) string {
 	var sb strings.Builder
 	for _, token := range tokens {
 		sb.WriteString(C.GoString(C.llama_token_to_str(llm.ctx, token)))
@@ -322,7 +338,7 @@ func (llm *LLM) detokenize(tokens ...C.llama_token) string {
 	return sb.String()
 }
 
-func (llm *LLM) next() (C.llama_token, error) {
+func (llm *llama) next() (C.llama_token, error) {
 	llm.mu.Lock()
 	defer llm.mu.Unlock()
 
