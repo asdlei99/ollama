@@ -2,6 +2,7 @@ package llm
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/jmorganca/ollama/api"
@@ -25,6 +26,14 @@ func New(model string, opts api.Options) (LLM, error) {
 	ggml, err := DecodeGGML(f, ModelFamilyLlama)
 	if err != nil {
 		return nil, err
+	}
+
+	switch ggml.FileType {
+	case FileTypeQ5_0, FileTypeQ5_1, FileTypeQ8_0:
+		// Q5_0, Q5_1, and Q8_0 do not support Metal API and will
+		// cause the runner to segmentation fault so disable GPU
+		log.Printf("WARNING: GPU disabled for Q5_0, Q5_1, and Q8_0")
+		opts.NumGPU = 0
 	}
 
 	switch ggml.ModelFamily {
